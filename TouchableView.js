@@ -1,9 +1,7 @@
 // @flow
-import { PropTypes } from 'prop-types';
 import React from 'react';
 import { PanResponder, View } from 'react-native';
-
-/* global Alert */
+import { PropTypes } from 'prop-types';
 
 class TouchableView extends React.Component {
   static propTypes = {
@@ -23,12 +21,9 @@ class TouchableView extends React.Component {
 
   buildGestures = () =>
     PanResponder.create({
-      // onResponderTerminate: this.props.onResponderTerminate ,
-      // onStartShouldSetResponder: () => true,
       onResponderTerminationRequest: this.props.onResponderTerminationRequest,
       onStartShouldSetPanResponderCapture: this.props
         .onStartShouldSetPanResponderCapture,
-      // onMoveShouldSetPanResponder: (evt, gestureState) => true,
       onPanResponderGrant: ({ nativeEvent }, gestureState) => {
         const event = this._transformEvent({ ...nativeEvent, gestureState });
         this._emit('touchstart', event);
@@ -53,9 +48,8 @@ class TouchableView extends React.Component {
           : this.props.onTouchesEnded(event);
       },
     });
-  _panResponder = null;
-  constructor(props) {
-    super(props);
+
+  componentWillMount() {
     this._panResponder = this.buildGestures();
   }
 
@@ -66,13 +60,13 @@ class TouchableView extends React.Component {
   };
 
   _transformEvent = event => {
-    event.preventDefault = event.preventDefault || (_ => { });
-    event.stopPropagation = event.stopPropagation || (_ => { });
+    event.preventDefault = event.preventDefault || (() => { });
+    event.stopPropagation = event.stopPropagation || (() => { });
     return event;
   };
 
   render() {
-    const { children, id, style, ...props } = this.props;
+    const { children, style, ...props } = this.props;
     return (
       <View {...props} style={[style]} {...this._panResponder.panHandlers}>
         {children}

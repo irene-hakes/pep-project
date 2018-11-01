@@ -1,112 +1,94 @@
+import ExpoGraphics from 'expo-graphics'; // 0.0.3
+import ExpoTHREE, { THREE } from 'expo-three'; // 2.2.2-alpha.1
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import Expo, { AR } from 'expo'
-import ExpoTHREE, { AR as ThreeAR, THREE } from 'expo-three'
-import { View as GraphicsView } from 'expo-graphics'
-
-import * as ARUtils from './ar-utils'
-import TouchableView from './TouchableView'
+import { Platform } from 'react-native';
+import * as ARUtils from './ar-utils';
+import TouchableView from './TouchableView';
 
 export default class App extends React.Component {
-  touch = new THREE.Vector2()
-  raycaster = new THREE.Raycaster()
+  touch = new THREE.Vector2();
+  raycaster = new THREE.Raycaster();
 
   updateTouch = ({ x, y }) => {
-    // console.log('inside update', this.cube)
-    // const { width, height } = this.scene.geometries[0]
-    // this.touch.x = x / 0.1 * 2 - 1
-    // this.touch.y = -(y / 0.1) * 2 + 1
-    if (x / 100 >= this.touch.x) {
-      this.touch.x = x / 100
-    } else {
-      this.touch.x = -x / 100
-    }
-    if (y / 100 >= this.touch.y) {
-      this.touch.y = y / 100
-    } else {
-      this.touch.y = -y / 100
-    }
-    // this.runHitTest()
-    console.log('TOUCH', this.touch)
-    const newX = this.cube.position.x + (this.touch.x / 375)
-    const newY = this.cube.position.y - (this.touch.y / 667)
-    // this.cube.position.set(newX, newY, -0.4)
-    this.scene.remove(this.cube)
-    this.setupCube(newX, newY)
-    this.cube.position.set(newX, newY, -0.4)
-    this.cube.visible = true
-  }
+    const { width, height } = this.scene.size;
+    this.touch.x = x / width * 2 - 1;
+    this.touch.y = -(y / height) * 2 + 1;
+
+    this.runHitTest();
+  };
 
   runHitTest = () => {
-    this.raycaster.setFromCamera(this.touch, this.camera)
-    const intersects = this.raycaster.intersectObjects(this.planes.children)
-    console.log('IN RUN HIT TEST--------->', this.cube.position)
-    console.log('planes', this.planes)
+    this.raycaster.setFromCamera(this.touch, this.camera);
+    const intersects = this.raycaster.intersectObjects(this.planes.children);
     for (const intersect of intersects) {
-      const { distance, face, faceIndex, object, point, uv } = intersect
-      // this.cube.position.set(point.x, point.y, point.z)
-      this.cube.visible = true
+      const { distance, face, faceIndex, object, point, uv } = intersect;
+      this.sphere.position.set(point.x, point.y, point.z);
+      this.sphere.visible = true;
     }
+  };
+
+  componentWillMount() {
+    THREE.suppressExpoWarnings(true);
   }
+  componentWillUnmount() {
+    THREE.suppressExpoWarnings(false);
+  }
+  onShouldReloadContext = () => {
+    /// The Android OS loses gl context on background, so we should reload it.
+    return Platform.OS === 'android';
+  };
 
   render() {
+    // Create an `ExpoGraphics.GLView` covering the whole screen, tell it to call our
+    // `onContextCreate` function once it's initialized.
     return (
-      <View style={{ flex: 1 }}>
-        <TouchableView
-          style={{ flex: 1 }}
-          onTouchesBegan={({ locationX, locationY }) => this.updateTouch({ x: locationX, y: locationY })}
-          onTouchesMoved={({ locationX, locationY }) => this.updateTouch({ x: locationX, y: locationY })}
-        // onTouchesEnded={() => (this.cube.visible = false)}
-        >
-
-          <GraphicsView
-            style={{ flex: 2 }}
-            onContextCreate={this.onContextCreate}
-            onRender={this.onRender}
-            onResize={this.onResize}
-            isArEnabled
-            isArRunningStateEnabled
-            isArCameraStateEnabled
-            arTrackingConfiguration={AR.TrackingConfigurations.World}
-          />
-        </TouchableView>
-      </View>
+      <TouchableView
+        style={{ flex: 1 }}
+        onTouchesBegan={({ locationX, locationY }) =>
+          this.updateTouch({ x: locationX, y: locationY })}
+        onTouchesMoved={({ locationX, locationY }) =>
+          this.updateTouch({ x: locationX, y: locationY })}
+        onTouchesEnded={() => (this.sphere.visible = false)}>
+        <ExpoGraphics.View
+          onShouldReloadContext={this.onShouldReloadContext}
+          onContextCreate={this.onContextCreate}
+          onRender={this.onRender}
+          onResize={this.onResize}
+          arEnabled
+        />
+      </TouchableView>
     );
   }
 
-  componentDidMount() {
-    // Turn off extra warnings
-    THREE.suppressExpoWarnings(true);
-    ThreeAR.suppressWarnings();
-  }
+  onContextCreate = async ({ gl, canvas, width, height, scale, arSession }) => {
+    if (!arSession) {
+      // oh no, something bad happened!
+      return;
+    }
+    this.arSession = arSession;
+    ExpoTHREE.setIsPlaneDetectionEnabled(arSession, true);
 
-  componentWillUnmount() {
-    THREE.supressExpoWarnings(false)
-  }
+    this.renderer = ExpoTHREE.createRenderer({ gl, canvas });
+    this.renderer.setPixelRatio(scale);
+    this.renderer.setSize(width, height);
+    this.renderer.setClearColor(0x000000, 1.0);
 
-  onContextCreate = props => {
-    AR.setPlaneDetection(AR.PlaneDetectionTypes.Horizontal);
-    this.commonSetup(props);
-  };
-
-  commonSetup = async ({ gl, canvas, width, height, scale: pixelRatio, arSession }) => {
-    this.renderer = new ExpoTHREE.Renderer({
-      gl,
-      pixelRatio,
+    this.scene = new THREE.Scene();
+    this.scene.background = ExpoTHREE.createARBackgroundTexture(
+      arSession,
+      this.renderer
+    );
+    this.scene.size = { width, height };
+    this.camera = ExpoTHREE.createARCamera(
+      arSession,
       width,
       height,
-    });
-    console.log('width', width)
-    console.log('height', height)
-    this.scene = new THREE.Scene();
-    this.scene.background = new ThreeAR.BackgroundTexture(this.renderer);
-    this.camera = new ThreeAR.Camera(width, height, 0.01, 1000);
-    //i want to make setupcube take in the new position, screen width, height
+      0.01,
+      1000
+    );
+
     this.setupARUtils();
-    this.setupCube(0, 0)
-
-
-    this.scene.add(new THREE.AmbientLight(0xffffff));
+    this.setupBall();
   };
 
   setupARUtils = () => {
@@ -116,26 +98,17 @@ export default class App extends React.Component {
     this.scene.add(this.planes);
   };
 
-  setupCube = (x, y) => {
-    console.log("CREATING A CUBE!")
-    const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  setupBall = () => {
+    const inch = 0.0254;
+    var geometry = new THREE.SphereBufferGeometry(inch * 3, 32, 32);
+    var material = new THREE.MeshBasicMaterial({ color: 0xff00ff });
+    var sphere = new THREE.Mesh(geometry, material);
+    sphere.visible = false;
+    this.scene.add(sphere);
+    this.sphere = sphere;
+  };
 
-
-    const material = new THREE.MeshPhongMaterial({ color: 0xff00ff })
-
-    // Combine our geometry and material
-    const cube = new THREE.Mesh(geometry, material);
-    // Place the box 0.4 meters in front of us.
-    cube.position.z = -0.4;
-    // cube.position.set(x, y)
-    // cube.visible = false
-    // Add the cube to the scene
-    this.scene.add(cube);
-    this.cube = cube
-    console.log('created cube', this.cube)
-  }
-
-  onResize = ({ x, y, scale, width, height }) => {
+  onResize = ({ width, height, scale }) => {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setPixelRatio(scale);
@@ -147,15 +120,7 @@ export default class App extends React.Component {
       this.points.updateWithSession(this.arSession);
       this.planes.updateWithSession(this.arSession);
     }
+
     this.renderer.render(this.scene, this.camera);
   };
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
